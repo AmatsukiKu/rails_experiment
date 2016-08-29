@@ -1,0 +1,31 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure('2') do |config|
+  config.vm.box = 'ubuntu/xenial64'
+  config.ssh.username = 'ubuntu'
+
+  config.vm.provision :itamae do |itamae|
+    itamae.recipes = ['../recipe.rb']
+  end
+
+  config.vm.network :forwarded_port, guest: 3000, host: 3080
+  config.vm.network 'private_network', ip: '192.168.33.10', auto_config: true
+
+  # 127.0.0.1:80をboxの中に転送する
+  config.trigger.after [:provision, :up, :reload] do
+    system('echo "
+rdr pass inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port 3080
+" | sudo pfctl -ef - > /dev/null 2>&1; echo "==> Fowarding Ports: 80 -> 3080"')
+  end
+
+  config.trigger.after [:halt, :destroy] do
+    system("sudo pfctl -f /etc/pf.conf > /dev/null 2>&1; echo '==> Removing Port Forwarding'")
+  end
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.gui = false
+    vb.customize ["modifyvm", :id, "--memory", "2048", "--cpus", "2", "--ioapic", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "off"] # VM DNS off
+  end
+end
